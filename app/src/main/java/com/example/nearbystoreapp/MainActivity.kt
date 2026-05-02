@@ -18,18 +18,24 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.nearbystoreapp.model.StoreModel
+import com.example.nearbystoreapp.screens.AdminDashboardScreen
 import com.example.nearbystoreapp.screen.auth.LoginScreen
 import com.example.nearbystoreapp.screen.auth.RegisterScreen
-import com.example.nearbystoreapp.screen.dashboard.DashboardScreen
 import com.example.nearbystoreapp.screen.dashboard.StoreDetailScreen
+import com.example.nearbystoreapp.screen.dashboard.SupportScreen
+import com.example.nearbystoreapp.screen.dashboard.map.MapScreen
 import com.example.nearbystoreapp.screen.dashboard.results.ResultList
 import com.example.nearbystoreapp.screen.profile.ProfileScreen
 import com.example.nearbystoreapp.screen.store.StoreDashboardPlaceholder
-import com.example.nearbystoreapp.screens.AdminDashboardScreen
+import com.example.nearbystoreapp.screen.wishlist.WishlistScreen
 import com.example.nearbystoreapp.viewModel.AuthState
 import com.example.nearbystoreapp.viewModel.AuthViewModel
 import com.example.nearbystoreapp.viewModel.WishlistViewModel
+import com.example.nearbystoreapp.util.FirebaseMigrationUtil
 import com.google.gson.Gson
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
 
@@ -46,6 +52,8 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.ACCESS_COARSE_LOCATION
             )
         )
+
+        FirebaseMigrationUtil.addMissingStoreFields()
 
         setContent {
             val navController = rememberNavController()
@@ -115,13 +123,30 @@ class MainActivity : ComponentActivity() {
                 }
 
                 composable("user_dashboard") {
-                    DashboardScreen(
+                    com.example.nearbystoreapp.screen.dashboard.DashboardScreen(
                         authViewModel = authViewModel,
+                        wishlistViewModel = wishlistViewModel,
                         onCategoryClick = { id, title ->
                             navController.navigate("results/$id/$title")
                         },
                         onProfileClick = {
                             navController.navigate("profile")
+                        },
+                        onStoreClick = { store ->
+                            val storeJson = URLEncoder.encode(
+                                Gson().toJson(store),
+                                StandardCharsets.UTF_8.toString()
+                            )
+                            navController.navigate("store_detail/$storeJson")
+                        },
+                        onWishlistClick = {
+                            navController.navigate("wishlist")
+                        },
+                        onSupportClick = {
+                            navController.navigate("support")
+                        },
+                        onCategoriesTabClick = {
+                            navController.navigate("results/0/All Stores")
                         }
                     )
                 }
@@ -160,6 +185,28 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                // ✅ Wishlist Screen
+                composable("wishlist") {
+                    WishlistScreen(
+                        wishlistViewModel = wishlistViewModel,
+                        onStoreClick = { store ->
+                            val storeJson = URLEncoder.encode(
+                                Gson().toJson(store),
+                                StandardCharsets.UTF_8.toString()
+                            )
+                            navController.navigate("store_detail/$storeJson")
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                // ✅ Support Screen
+                composable("support") {
+                    SupportScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
                 composable("results/{id}/{title}") { backStackEntry ->
                     val id = backStackEntry.arguments?.getString("id") ?: ""
                     val title = backStackEntry.arguments?.getString("title") ?: ""
@@ -168,25 +215,38 @@ class MainActivity : ComponentActivity() {
                         title = title,
                         onBackClick = { navController.popBackStack() },
                         onStoreClick = { store ->
-                            // ✅ Fix: MapScreen ki jagah StoreDetailScreen
-                            val storeJson = java.net.URLEncoder.encode(
-                                Gson().toJson(store), "UTF-8"
+                            val storeJson = URLEncoder.encode(
+                                Gson().toJson(store),
+                                StandardCharsets.UTF_8.toString()
                             )
                             navController.navigate("store_detail/$storeJson")
                         }
                     )
                 }
 
-                // ✅ Fix: StoreDetailScreen route add kiya
+                // ✅ StoreDetailScreen
                 composable("store_detail/{storeJson}") { backStackEntry ->
                     val encoded = backStackEntry.arguments?.getString("storeJson") ?: ""
-                    val storeJson = java.net.URLDecoder.decode(encoded, "UTF-8")
+                    val storeJson = URLDecoder.decode(
+                        encoded,
+                        StandardCharsets.UTF_8.toString()
+                    )
                     val store = Gson().fromJson(storeJson, StoreModel::class.java)
                     StoreDetailScreen(
                         store = store,
-                        wishlistViewModel = wishlistViewModel,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        wishlistViewModel = wishlistViewModel
                     )
+                }
+
+                composable("map/{storeJson}") { backStackEntry ->
+                    val encoded = backStackEntry.arguments?.getString("storeJson") ?: ""
+                    val storeJson = URLDecoder.decode(
+                        encoded,
+                        StandardCharsets.UTF_8.toString()
+                    )
+                    val store = Gson().fromJson(storeJson, StoreModel::class.java)
+                    MapScreen(store = store)
                 }
             }
 

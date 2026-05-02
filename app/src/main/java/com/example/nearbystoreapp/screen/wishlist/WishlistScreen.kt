@@ -47,7 +47,7 @@ fun WishlistScreen(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                // ✅ Back button add kiya
+
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
