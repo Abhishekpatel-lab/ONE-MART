@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">ONE MART</string>
+    <string name="default_web_client_id">YOUR_WEB_CLIENT_ID</string>
+    <string name="cloudinary_cloud_name">dlkfpznqk</string>
+    <string name="cloudinary_upload_preset">Nearby</string>
+</resources>

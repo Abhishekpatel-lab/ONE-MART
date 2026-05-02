@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "471401052318",
+    "firebase_url": "https://nearbystoreapp-61f95-default-rtdb.firebaseio.com",
+    "project_id": "nearbystoreapp-61f95",
+    "storage_bucket": "nearbystoreapp-61f95.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:471401052318:android:300be704ce902e728b638f",
+        "android_client_info": {
+          "package_name": "com.example.nearbystoreapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "471401052318-648vdp74hjnqb5blb55kcauf9kufu27i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.nearbystoreapp",
+            "certificate_hash": "243183d1d18394cbb206ade62cb96b42b43f559e"
+          }
+        },
+        {
+          "client_id": "471401052318-16l3950d29jet0nm8h63dcg6igamcguj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHetStzE-18ikXlzB3iaGD9WBUv2AMK2s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "471401052318-16l3950d29jet0nm8h63dcg6igamcguj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
