@@ -39,7 +39,8 @@ data class ItemModel(
     val price: String = "",
     val unit: String = "",
     val available: Boolean = true,
-    val imagePath: String = ""
+    val imagePath: String = "",
+    val itemKey: String = ""  // ✅ Item ka unique key review ke liye
 )
 
 fun getDetailSectionTitle(category: String): String =
@@ -60,6 +61,7 @@ fun StoreDetailScreen(
 
     val items = remember { mutableStateListOf<ItemModel>() }
     var itemsLoading by remember { mutableStateOf(true) }
+    var storeReviewRefresh by remember { mutableStateOf(0) }
 
     val wishlistKeys by wishlistViewModel.wishlistKeys.collectAsState()
     val isWishlisted = wishlistKeys.contains(store.firebaseKey)
@@ -82,7 +84,8 @@ fun StoreDetailScreen(
                                     price     = item.child("price").value?.toString() ?: "",
                                     unit      = item.child("unit").value?.toString() ?: "",
                                     available = item.child("available").value as? Boolean ?: true,
-                                    imagePath = item.child("imagePath").value?.toString() ?: ""
+                                    imagePath = item.child("imagePath").value?.toString() ?: "",
+                                    itemKey   = item.key ?: ""
                                 )
                             )
                         }
@@ -171,17 +174,39 @@ fun StoreDetailScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     InfoRow(emoji = "🕐", text = store.hours)
                     Spacer(modifier = Modifier.height(4.dp))
-
-                    // ✅ Call number — clickable, dialer open hoga
-                    InfoRow(
-                        emoji = "📞",
-                        text = store.call,
-                        isPhone = true
-                    )
+                    InfoRow(emoji = "📞", text = store.call, isPhone = true)
                     Spacer(modifier = Modifier.height(4.dp))
                     InfoRow(emoji = "🟢", text = store.activity)
                 }
                 HorizontalDivider(color = Color.DarkGray, thickness = 1.dp)
+            }
+
+            // ─── Store Review Input ───────────────────────
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    ReviewInputSection(
+                        targetType = "store",
+                        targetId = store.firebaseKey,
+                        targetName = store.title,
+                        onReviewSubmitted = { storeReviewRefresh++ }
+                    )
+                }
+            }
+
+            // ─── Store Reviews List ───────────────────────
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    ReviewsSection(
+                        targetType = "store",
+                        targetId = store.firebaseKey,
+                        refreshTrigger = storeReviewRefresh
+                    )
+                }
+                HorizontalDivider(
+                    color = Color.DarkGray,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
             }
 
             // ─── Items/Menu Title ─────────────────────────
@@ -195,14 +220,12 @@ fun StoreDetailScreen(
                 )
             }
 
-            // ─── Items List ───────────────────────────────
+            // ─── Items List with Reviews ──────────────────
             when {
                 itemsLoading -> {
                     item {
                         Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
+                            Modifier.fillMaxWidth().padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(
@@ -218,10 +241,7 @@ fun StoreDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .background(
-                                    colorResource(R.color.black3),
-                                    RoundedCornerShape(10.dp)
-                                )
+                                .background(colorResource(R.color.black3), RoundedCornerShape(10.dp))
                                 .padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -236,7 +256,13 @@ fun StoreDetailScreen(
                     }
                 }
                 else -> {
-                    items(items) { item -> ItemCard(item = item) }
+                    // ✅ Har item ke niche uska review section
+                    items(items) { item ->
+                        ItemCardWithReview(
+                            item = item,
+                            storeKey = store.firebaseKey
+                        )
+                    }
                 }
             }
 
@@ -273,7 +299,6 @@ fun StoreDetailScreen(
                             snippet = store.shortAddress
                         )
                     }
-                    // ✅ Map tap → Google Maps open
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -292,9 +317,7 @@ fun StoreDetailScreen(
                                         "https://www.google.com/maps/search/?api=1" +
                                                 "&query=${store.latitude},${store.longitude}"
                                     )
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, browserUri)
-                                    )
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, browserUri))
                                 }
                             }
                     )
@@ -311,7 +334,105 @@ fun StoreDetailScreen(
     }
 }
 
-// ─── InfoRow — Phone clickable ────────────────────────────
+// ─── Item Card + Item Review ──────────────────────────────
+@Composable
+fun ItemCardWithReview(item: ItemModel, storeKey: String) {
+    var showReviews by remember { mutableStateOf(false) }
+    var itemReviewRefresh by remember { mutableStateOf(0) }
+
+    // Item ka unique ID = storeKey_itemKey
+    val itemId = "${storeKey}_${item.itemKey}"
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .background(colorResource(R.color.black3), RoundedCornerShape(10.dp))
+    ) {
+        // ─── Item Row ─────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (item.imagePath.isNotEmpty()) {
+                AsyncImage(
+                    model = item.imagePath,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    item.name,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (item.unit.isNotEmpty()) {
+                    Text(text = item.unit, color = Color.Gray, fontSize = 12.sp)
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                if (item.price.isNotEmpty()) {
+                    Text(
+                        "₹${item.price}",
+                        color = colorResource(R.color.gold),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = if (item.available) "✅ Available" else "❌ Unavailable",
+                    color = if (item.available) Color.Green else Color.Red,
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        // ─── Item Review Toggle Button ────────────────
+        if (item.itemKey.isNotEmpty()) {
+            TextButton(
+                onClick = { showReviews = !showReviews },
+                modifier = Modifier.padding(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = if (showReviews) "▲ Close Reviews" else "⭐ Show Reviews / Give",
+                    color = colorResource(R.color.gold),
+                    fontSize = 12.sp
+                )
+            }
+
+            if (showReviews) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    ReviewInputSection(
+                        targetType = "item",
+                        targetId = itemId,
+                        targetName = item.name,
+                        onReviewSubmitted = { itemReviewRefresh++ }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    ReviewsSection(
+                        targetType = "item",
+                        targetId = itemId,
+                        refreshTrigger = itemReviewRefresh
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ─── InfoRow ──────────────────────────────────────────────
 @Composable
 fun InfoRow(
     emoji: String,
@@ -326,7 +447,6 @@ fun InfoRow(
         modifier = if (isPhone) {
             Modifier
                 .clickable {
-                    // ✅ Dialer open karo
                     val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$text"))
                     context.startActivity(intent)
                 }
@@ -339,7 +459,6 @@ fun InfoRow(
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = text,
-            // ✅ Phone number gold + underline
             color = if (isPhone) colorResource(R.color.gold) else Color.Gray,
             fontSize = 13.sp,
             fontWeight = if (isPhone) FontWeight.SemiBold else FontWeight.Normal,
@@ -352,7 +471,7 @@ fun InfoRow(
     }
 }
 
-// ─── Item Card ────────────────────────────────────────────
+// ─── Item Card (old — ab ItemCardWithReview use hoga) ─────
 @Composable
 fun ItemCard(item: ItemModel) {
     Row(
@@ -375,12 +494,7 @@ fun ItemCard(item: ItemModel) {
             Spacer(modifier = Modifier.width(12.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                item.name,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(item.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             if (item.unit.isNotEmpty()) {
                 Text(text = item.unit, color = Color.Gray, fontSize = 12.sp)
             }
