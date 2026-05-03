@@ -66,7 +66,8 @@ data class OwnerStore(
     val imagePath: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
-    val items: List<StoreItem> = emptyList()
+    val items: List<StoreItem> = emptyList(),
+    val call: String = ""  // ✅ Phone number field
 )
 
 val storeCategories = listOf(
@@ -100,7 +101,6 @@ fun uploadToCloudinary(
     val bytes = stream.readBytes()
     stream.close()
 
-    // ✅ Fixed — toRequestBody use karo
     val requestBody = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
         .addFormDataPart(
@@ -379,7 +379,8 @@ fun StoreOwnerHome(
                             imagePath = store.child("ImagePath").value?.toString() ?: "",
                             latitude = store.child("Latitude").value?.toString()?.toDoubleOrNull() ?: 0.0,
                             longitude = store.child("Longitude").value?.toString()?.toDoubleOrNull() ?: 0.0,
-                            items = itemsList
+                            items = itemsList,
+                            call = store.child("Call").value?.toString() ?: ""  // ✅ Load phone number
                         ))
                     }
                 }
@@ -495,6 +496,8 @@ fun OwnerStoreCard(store: OwnerStore, onEdit: () -> Unit, onDelete: () -> Unit) 
                 Text(store.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Text(store.category, color = colorResource(R.color.gold), fontSize = 13.sp)
                 if (store.address.isNotEmpty()) Text("📍 ${store.address}", color = Color.Gray, fontSize = 12.sp)
+                // ✅ Phone number card mein bhi dikhao
+                if (store.call.isNotEmpty()) Text("📞 ${store.call}", color = Color.Gray, fontSize = 12.sp)
                 if (store.items.isNotEmpty()) Text("${store.items.size} ${getSectionTitle(store.category)}", color = Color.Gray, fontSize = 12.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -515,6 +518,7 @@ fun AddEditStoreScreen(existingStore: OwnerStore?, onBack: () -> Unit, onSaved: 
     var description by remember { mutableStateOf(existingStore?.description ?: "") }
     var selectedCategory by remember { mutableStateOf(existingStore?.category ?: "") }
     var address by remember { mutableStateOf(existingStore?.address ?: "") }
+    var phoneNumber by remember { mutableStateOf(existingStore?.call ?: "") }  // ✅ Phone field
     var latitude by remember { mutableStateOf(existingStore?.latitude ?: 0.0) }
     var longitude by remember { mutableStateOf(existingStore?.longitude ?: 0.0) }
     var manualLat by remember { mutableStateOf(if (existingStore?.latitude != 0.0) existingStore?.latitude?.toString() ?: "" else "") }
@@ -581,7 +585,8 @@ fun AddEditStoreScreen(existingStore: OwnerStore?, onBack: () -> Unit, onSaved: 
             "ShortAddress" to address.take(30), "ImagePath" to uploadedImageUrl,
             "Latitude" to finalLat, "Longitude" to finalLng,
             "Activity" to "Open", "Hours" to "9 am - 9 pm",
-            "Call" to "", "rating" to 0.0, "orderCount" to 0, "items" to itemsMap
+            "Call" to phoneNumber,  // ✅ Phone number save hoga Firebase mein
+            "rating" to 0.0, "orderCount" to 0, "items" to itemsMap
         )
         if (isEditing && existingStore != null) {
             db.child("Stores").child(existingStore.id).updateChildren(storeData)
@@ -659,6 +664,19 @@ fun AddEditStoreScreen(existingStore: OwnerStore?, onBack: () -> Unit, onSaved: 
             }
 
             StoreTextField(value = address, onValueChange = { address = it }, label = "Address")
+
+            // ✅ Phone Number Field — naya add kiya
+            OutlinedTextField(
+                value = phoneNumber,
+                onValueChange = { if (it.length <= 10) phoneNumber = it },
+                label = { Text("📞 Phone Number", color = Color.Gray) },
+                placeholder = { Text("10 digit number", color = Color.Gray) },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                colors = storeTextFieldColors(),
+                singleLine = true,
+                leadingIcon = { Text("📞", fontSize = 16.sp, modifier = Modifier.padding(start = 4.dp)) }
+            )
 
             Text("📍 Location", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colorResource(R.color.gold))
             Button(

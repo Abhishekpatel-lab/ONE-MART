@@ -21,6 +21,7 @@ import com.example.nearbystoreapp.model.StoreModel
 import com.example.nearbystoreapp.screens.AdminDashboardScreen
 import com.example.nearbystoreapp.screen.auth.LoginScreen
 import com.example.nearbystoreapp.screen.auth.RegisterScreen
+import com.example.nearbystoreapp.screen.dashboard.AllCategoriesScreen
 import com.example.nearbystoreapp.screen.dashboard.StoreDetailScreen
 import com.example.nearbystoreapp.screen.dashboard.SupportScreen
 import com.example.nearbystoreapp.screen.dashboard.map.MapScreen
@@ -145,8 +146,9 @@ class MainActivity : ComponentActivity() {
                         onSupportClick = {
                             navController.navigate("support")
                         },
+                        // ✅ FIX: Ab AllCategoriesScreen pe navigate karega
                         onCategoriesTabClick = {
-                            navController.navigate("results/0/All Stores")
+                            navController.navigate("all_categories")
                         }
                     )
                 }
@@ -185,7 +187,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // ✅ Wishlist Screen
                 composable("wishlist") {
                     WishlistScreen(
                         wishlistViewModel = wishlistViewModel,
@@ -200,7 +201,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // ✅ Support Screen
                 composable("support") {
                     SupportScreen(
                         onBack = { navController.popBackStack() }
@@ -224,7 +224,21 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // ✅ StoreDetailScreen
+                // ✅ NEW: AllCategoriesScreen route
+                composable("all_categories") {
+                    AllCategoriesScreen(
+                        wishlistViewModel = wishlistViewModel,
+                        onBack = { navController.popBackStack() },
+                        onStoreClick = { store ->
+                            val storeJson = URLEncoder.encode(
+                                Gson().toJson(store),
+                                StandardCharsets.UTF_8.toString()
+                            )
+                            navController.navigate("store_detail/$storeJson")
+                        }
+                    )
+                }
+
                 composable("store_detail/{storeJson}") { backStackEntry ->
                     val encoded = backStackEntry.arguments?.getString("storeJson") ?: ""
                     val storeJson = URLDecoder.decode(
