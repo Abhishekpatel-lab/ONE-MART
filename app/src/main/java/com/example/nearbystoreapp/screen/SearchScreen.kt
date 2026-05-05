@@ -1,7 +1,7 @@
 package com.example.nearbystoreapp.screen.dashboard
 
-
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,140 +24,98 @@ import androidx.compose.ui.unit.sp
 import com.example.nearbystoreapp.R
 import com.google.firebase.database.FirebaseDatabase
 
-// ---- Data classes ----
 data class StoreResult(
-    val id: String,
-    val name: String,
-    val category: String,
+    val firebaseKey: String = "",
+    val name: String = "",
+    val category: String = "",
+    val address: String = "",
     val rating: Double = 0.0,
-    val orderCount: Int = 0
+    val imagePath: String = ""
 )
 
-data class ProductResult(
-    val id: String,
-    val name: String,
-    val storeName: String,
-    val price: String
+data class ItemResult(
+    val itemName: String = "",
+    val price: String = "",
+    val unit: String = "",
+    val storeName: String = "",
+    val storeKey: String = "",
+    val imagePath: String = ""
 )
-
-// ---- Category keyword map ----
-val categoryKeywords = mapOf(
-    "grocery" to listOf("grocery", "groceries", "sabzi", "vegetable", "fruit", "ration"),
-    "dairy" to listOf("dairy", "milk", "doodh", "paneer", "curd", "dahi", "cheese", "butter"),
-    "bakery" to listOf("bakery", "bread", "cake", "biscuit", "roti", "paav"),
-    "pharmacy" to listOf("pharmacy", "medicine", "dawai", "medical", "tablet", "chemist"),
-    "clothing" to listOf("clothing", "clothes", "shirt", "pant", "dress", "kapda", "fashion"),
-    "electronics" to listOf("electronics", "mobile", "phone", "laptop", "tv", "charger"),
-    "restaurant" to listOf("restaurant", "food", "khana", "biryani", "pizza", "burger", "cafe"),
-    "stationery" to listOf("stationery", "pen", "pencil", "copy", "notebook", "book"),
-    "hardware" to listOf("hardware", "tools", "screw", "pipe", "cement", "paint")
-)
-
-// Query se category guess karo
-fun guessCategory(query: String): String? {
-    val q = query.lowercase()
-    for ((category, keywords) in categoryKeywords) {
-        if (keywords.any { q.contains(it) }) return category
-    }
-    return null
-}
 
 @Composable
-fun SearchScreen(
-    onBack: () -> Unit = {}
-) {
-    var query by remember { mutableStateOf("") }
+fun SearchScreen(onBack: () -> Unit = {}) {
+    var query        by remember { mutableStateOf("") }
+    var selectedTab  by remember { mutableStateOf(0) } // 0 = Stores, 1 = Items
     var storeResults by remember { mutableStateOf<List<StoreResult>>(emptyList()) }
-    var productResults by remember { mutableStateOf<List<ProductResult>>(emptyList()) }
-    var similarStores by remember { mutableStateOf<List<StoreResult>>(emptyList()) }
-    var popularStores by remember { mutableStateOf<List<StoreResult>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var noResultFound by remember { mutableStateOf(false) }
+    var itemResults  by remember { mutableStateOf<List<ItemResult>>(emptyList()) }
+    var isLoading    by remember { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
-
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    LaunchedEffect(query) {
+    // ── Search logic ──
+    LaunchedEffect(query, selectedTab) {
         if (query.length < 2) {
             storeResults = emptyList()
-            productResults = emptyList()
-            similarStores = emptyList()
-            popularStores = emptyList()
-            noResultFound = false
+            itemResults  = emptyList()
             return@LaunchedEffect
         }
 
         isLoading = true
-        noResultFound = false
-        val db = FirebaseDatabase.getInstance().reference
         val queryLower = query.lowercase()
-        val guessedCategory = guessCategory(query)
+        val db = FirebaseDatabase.getInstance().reference
 
-        // --- Stores Search ---
-        db.child("stores").get().addOnSuccessListener { snapshot ->
-            val stores = mutableListOf<StoreResult>()
-            val similar = mutableListOf<StoreResult>()
-            val popular = mutableListOf<StoreResult>()
+        db.child("Stores").get().addOnSuccessListener { snapshot ->
+            val stores  = mutableListOf<StoreResult>()
+            val items   = mutableListOf<ItemResult>()
 
             for (store in snapshot.children) {
-                val name = store.child("name").value?.toString() ?: continue
-                val category = store.child("category").value?.toString() ?: ""
-                val rating = store.child("rating").value?.toString()?.toDoubleOrNull() ?: 0.0
-                val orderCount = store.child("orderCount").value?.toString()?.toIntOrNull() ?: 0
+                val storeName = store.child("Title").value?.toString()    ?: ""
+                val category  = store.child("Category").value?.toString() ?: ""
+                val address   = store.child("Address").value?.toString()  ?: ""
+                val rating    = store.child("rating").value?.toString()?.toDoubleOrNull() ?: 0.0
+                val imagePath = store.child("ImagePath").value?.toString() ?: ""
+                val storeKey  = store.key ?: ""
 
-                val storeObj = StoreResult(
-                    id = store.key ?: "",
-                    name = name,
-                    category = category,
-                    rating = rating,
-                    orderCount = orderCount
-                )
+                // ── Store search ──
+                if (storeName.lowercase().contains(queryLower) ||
+                    category.lowercase().contains(queryLower) ||
+                    address.lowercase().contains(queryLower)
+                ) {
+                    stores.add(StoreResult(
+                        firebaseKey = storeKey,
+                        name        = storeName,
+                        category    = category,
+                        address     = address,
+                        rating      = rating,
+                        imagePath   = imagePath
+                    ))
+                }
 
-                when {
-                    // Exact match
-                    name.lowercase().contains(queryLower) ||
-                            category.lowercase().contains(queryLower) -> {
-                        stores.add(storeObj)
-                    }
-                    // Same category (guessed)
-                    guessedCategory != null &&
-                            category.lowercase().contains(guessedCategory) -> {
-                        similar.add(storeObj)
-                    }
-                    // Popular fallback
-                    else -> {
-                        if (rating >= 4.0 || orderCount >= 50) {
-                            popular.add(storeObj)
-                        }
+                // ── Items search ──
+                for (item in store.child("items").children) {
+                    val itemName = item.child("name").value?.toString() ?: ""
+                    val price    = item.child("price").value?.toString() ?: ""
+                    val unit     = item.child("unit").value?.toString()  ?: ""
+                    val itemImg  = item.child("imagePath").value?.toString() ?: ""
+
+                    if (itemName.lowercase().contains(queryLower)) {
+                        items.add(ItemResult(
+                            itemName  = itemName,
+                            price     = price,
+                            unit      = unit,
+                            storeName = storeName,
+                            storeKey  = storeKey,
+                            imagePath = itemImg
+                        ))
                     }
                 }
             }
 
             storeResults = stores
-            similarStores = similar.sortedByDescending { it.rating }
-            popularStores = popular
-                .sortedWith(compareByDescending<StoreResult> { it.rating }
-                    .thenByDescending { it.orderCount })
-                .take(5)
-
-            isLoading = false
-        }
-
-        // --- Products Search ---
-        db.child("products").get().addOnSuccessListener { snapshot ->
-            val products = mutableListOf<ProductResult>()
-            for (product in snapshot.children) {
-                val name = product.child("name").value?.toString() ?: continue
-                val storeName = product.child("storeName").value?.toString() ?: ""
-                val price = product.child("price").value?.toString() ?: ""
-                if (name.lowercase().contains(queryLower)) {
-                    products.add(ProductResult(product.key ?: "", name, storeName, price))
-                }
-            }
-            productResults = products
-            noResultFound = storeResults.isEmpty() && products.isEmpty()
-        }
+            itemResults  = items
+            isLoading    = false
+        }.addOnFailureListener { isLoading = false }
     }
 
     Column(
@@ -165,231 +123,196 @@ fun SearchScreen(
             .fillMaxSize()
             .background(colorResource(R.color.black2))
     ) {
-        // ---- Top Search Bar ----
+        // ── Search Bar ──
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colorResource(R.color.black2))
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier          = Modifier.fillMaxWidth().background(colorResource(R.color.black2)).padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = colorResource(R.color.gold)
-                )
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colorResource(R.color.gold))
             }
-
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(colorResource(R.color.black3), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier          = Modifier.weight(1f).background(colorResource(R.color.black3), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = "🔍", fontSize = 16.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 BasicTextField(
-                    value = query,
+                    value         = query,
                     onValueChange = { query = it },
+                    modifier      = Modifier.weight(1f).focusRequester(focusRequester),
+                    textStyle     = TextStyle(color = Color.White, fontSize = 14.sp),
+                    singleLine    = true,
+                    decorationBox = { innerTextField ->
+                        if (query.isEmpty()) Text("Search stores, items...", fontSize = 14.sp, color = Color.Gray)
+                        innerTextField()
+                    }
+                )
+                if (query.isNotEmpty()) {
+                    Text(
+                        text     = "✕",
+                        color    = Color.Gray,
+                        fontSize = 16.sp,
+                        modifier = Modifier.clickable { query = "" }
+                    )
+                }
+            }
+        }
+
+        // ── Tabs — Stores | Items ──
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("🏪 Stores", "📦 Items").forEachIndexed { index, label ->
+                val isSelected = selectedTab == index
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .focusRequester(focusRequester),
-                    textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                    decorationBox = { innerTextField ->
-                        if (query.isEmpty()) {
+                        .background(
+                            if (isSelected) colorResource(R.color.gold) else colorResource(R.color.black3),
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable { selectedTab = index }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text       = label,
+                        color      = if (isSelected) Color.Black else Color.Gray,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize   = 14.sp
+                    )
+                }
+            }
+        }
+
+        // ── Results ──
+        when {
+            isLoading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = colorResource(R.color.gold))
+                }
+            }
+            query.length < 2 -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "🔍", fontSize = 48.sp)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text     = if (selectedTab == 0) "Search stores..." else "Search items...",
+                            color    = Color.Gray,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+            selectedTab == 0 -> {
+                // ── Stores Tab ──
+                if (storeResults.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "😕", fontSize = 40.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("\"$query\" store nahi mila", color = Color.Gray, fontSize = 14.sp)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier       = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
                             Text(
-                                text = "Search stores, products...",
-                                fontSize = 14.sp,
-                                color = Color.Gray
+                                "${storeResults.size} store mile",
+                                color    = Color.Gray,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
-                        innerTextField()
-                    },
-                    singleLine = true
-                )
-            }
-        }
-
-        // ---- Loading ----
-        if (isLoading) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = colorResource(R.color.gold))
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-
-                // ---- Exact Match: Stores ----
-                if (storeResults.isNotEmpty()) {
-                    item { SectionHeader(title = "🏪 Stores") }
-                    items(storeResults) { store ->
-                        StoreCard(store = store)
-                    }
-                }
-
-                // ---- Exact Match: Products ----
-                if (productResults.isNotEmpty()) {
-                    item { SectionHeader(title = "📦 Products") }
-                    items(productResults) { product ->
-                        ProductCard(product = product)
-                    }
-                }
-
-                // ---- No Exact Match ----
-                if (noResultFound) {
-                    item { NoResultBanner(query = query) }
-
-                    if (similarStores.isNotEmpty()) {
-                        item { SectionHeader(title = "🔎 Similar Stores") }
-                        items(similarStores) { store ->
-                            StoreCard(store = store, showCategory = true)
+                        items(storeResults) { store ->
+                            SearchStoreCard(store = store)
                         }
                     }
-
-                    if (popularStores.isNotEmpty()) {
-                        item { SectionHeader(title = "⭐ Popular Stores") }
-                        items(popularStores) { store ->
-                            StoreCard(store = store, showRating = true)
+                }
+            }
+            else -> {
+                // ── Items Tab ──
+                if (itemResults.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "😕", fontSize = 40.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("\"$query\" item nahi mila", color = Color.Gray, fontSize = 14.sp)
                         }
                     }
-
-                    if (similarStores.isEmpty() && popularStores.isEmpty()) {
+                } else {
+                    LazyColumn(
+                        modifier       = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         item {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Koi store available nahi hai abhi 😔",
-                                    color = Color.Gray,
-                                    fontSize = 13.sp
-                                )
-                            }
+                            Text(
+                                "${itemResults.size} item mile",
+                                color    = Color.Gray,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
+                        items(itemResults) { item ->
+                            SearchItemCard(item = item)
                         }
                     }
                 }
-
-                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
     }
 }
 
-// ---- Reusable Composables ----
-
+// ── Store Card ────────────────────────────────────────────
 @Composable
-fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Bold,
-        color = colorResource(R.color.gold),
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-    )
-}
-
-@Composable
-fun NoResultBanner(query: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .background(colorResource(R.color.black3), RoundedCornerShape(12.dp))
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "\"$query\" nahi mila 😕",
-            color = Color.White,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Yahan kuch similar options hain jo shayad kaam aayein 👇",
-            color = Color.Gray,
-            fontSize = 13.sp
-        )
-    }
-}
-
-@Composable
-fun StoreCard(
-    store: StoreResult,
-    showCategory: Boolean = false,
-    showRating: Boolean = false
-) {
+fun SearchStoreCard(store: StoreResult) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
-            .background(colorResource(R.color.black3), RoundedCornerShape(10.dp))
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier          = Modifier.fillMaxWidth().background(colorResource(R.color.black3), RoundedCornerShape(12.dp)).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = store.name,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            if (showCategory && store.category.isNotEmpty()) {
-                Text(
-                    text = store.category,
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
+            Text(store.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            if (store.category.isNotEmpty()) {
+                Text(store.category, color = colorResource(R.color.gold), fontSize = 12.sp)
+            }
+            if (store.address.isNotEmpty()) {
+                Text("📍 ${store.address}", color = Color.Gray, fontSize = 11.sp, maxLines = 1)
             }
         }
-        if (showRating && store.rating > 0) {
-            Text(
-                text = "⭐ ${store.rating}",
-                color = colorResource(R.color.gold),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+        if (store.rating > 0) {
+            Column(horizontalAlignment = Alignment.End) {
+                Text("⭐ ${String.format("%.1f", store.rating)}", color = colorResource(R.color.gold), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
+// ── Item Card ─────────────────────────────────────────────
 @Composable
-fun ProductCard(product: ProductResult) {
+fun SearchItemCard(item: ItemResult) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
-            .background(colorResource(R.color.black3), RoundedCornerShape(10.dp))
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier          = Modifier.fillMaxWidth().background(colorResource(R.color.black3), RoundedCornerShape(12.dp)).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = product.name,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "by ${product.storeName}",
-                color = Color.Gray,
-                fontSize = 12.sp
-            )
+            Text(item.itemName, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            if (item.unit.isNotEmpty()) {
+                Text(item.unit, color = Color.Gray, fontSize = 12.sp)
+            }
+            Text("🏪 ${item.storeName}", color = colorResource(R.color.gold), fontSize = 12.sp)
         }
-        Text(
-            text = "₹${product.price}",
-            color = colorResource(R.color.gold),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
+        if (item.price.isNotEmpty()) {
+            Text("₹${item.price}", color = colorResource(R.color.gold), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
