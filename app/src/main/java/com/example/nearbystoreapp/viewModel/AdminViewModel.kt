@@ -2,14 +2,14 @@ package com.example.nearbystoreapp.viewModel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.nearbystoreapp.screens.ReportData
-import com.example.nearbystoreapp.screens.StoreData
-import com.example.nearbystoreapp.screens.UserData
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.util.Calendar
+
+
 
 class AdminViewModel : ViewModel() {
 
@@ -27,42 +27,62 @@ class AdminViewModel : ViewModel() {
     private val _isLoadingStores = MutableStateFlow(false)
     val isLoadingStores: StateFlow<Boolean> = _isLoadingStores
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
+    private val _recentActivity = MutableStateFlow<List<ActivityItem>>(emptyList())
+    val recentActivity: StateFlow<List<ActivityItem>> = _recentActivity
+
+    private val _usersThisWeek = MutableStateFlow(0)
+    val usersThisWeek: StateFlow<Int> = _usersThisWeek
+
+    private val _storesThisWeek = MutableStateFlow(0)
+    val storesThisWeek: StateFlow<Int> = _storesThisWeek
+
+    private val _reportsThisWeek = MutableStateFlow(0)
+    val reportsThisWeek: StateFlow<Int> = _reportsThisWeek
+
+    private fun weekStart(): Long {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+        return cal.timeInMillis
+    }
 
     fun loadUsers() {
         viewModelScope.launch {
             try {
                 val snapshot = database.child("users").get().await()
                 val list = mutableListOf<UserData>()
+                var weekCount = 0
+                val weekStart = weekStart()
                 snapshot.children.forEach { child ->
-                    val user = UserData(
-                        uid      = child.key ?: "",
-                        name     = child.child("name").value?.toString() ?: "",
-                        email    = child.child("email").value?.toString() ?: "",
-                        userType = child.child("userType").value?.toString() ?: "user",
-                        isBanned = child.child("isBanned").getValue(Boolean::class.java) ?: false
-                    )
-                    list.add(user)
+                    val createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                    list.add(UserData(
+                        uid       = child.key ?: "",
+                        name      = child.child("name").value?.toString() ?: "",
+                        email     = child.child("email").value?.toString() ?: "",
+                        userType  = child.child("userType").value?.toString() ?: "user",
+                        isBanned  = child.child("isBanned").getValue(Boolean::class.java) ?: false,
+                        createdAt = createdAt
+                    ))
+                    if (createdAt > weekStart) weekCount++
                 }
                 _users.value = list
-            } catch (e: Exception) {
-                _error.value = "Users load failed: ${e.message}"
-            }
+                _usersThisWeek.value = weekCount
+                buildRecentActivity()
+            } catch (_: Exception) {}
         }
     }
 
     fun toggleBan(uid: String, currentlyBanned: Boolean) {
         viewModelScope.launch {
             try {
-                database.child("users").child(uid)
-                    .child("isBanned").setValue(!currentlyBanned).await()
+                database.child("users").child(uid).child("isBanned").setValue(!currentlyBanned).await()
                 _users.value = _users.value.map {
                     if (it.uid == uid) it.copy(isBanned = !currentlyBanned) else it
                 }
-            } catch (e: Exception) {
-                _error.value = "Ban toggle failed: ${e.message}"
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -72,19 +92,24 @@ class AdminViewModel : ViewModel() {
                 _isLoadingStores.value = true
                 val snapshot = database.child("Stores").get().await()
                 val list = mutableListOf<StoreData>()
+                var weekCount = 0
+                val weekStart = weekStart()
                 snapshot.children.forEach { child ->
-                    val store = StoreData(
+                    val createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                    list.add(StoreData(
                         storeId    = child.key ?: "",
                         name       = child.child("Title").value?.toString() ?: "Unknown Store",
                         ownerEmail = child.child("Address").value?.toString() ?: "",
                         status     = child.child("status").value?.toString() ?: "approved",
-                        isBlocked  = child.child("isBlocked").getValue(Boolean::class.java) ?: false
-                    )
-                    list.add(store)
+                        isBlocked  = child.child("isBlocked").getValue(Boolean::class.java) ?: false,
+                        createdAt  = createdAt
+                    ))
+                    if (createdAt > weekStart) weekCount++
                 }
                 _stores.value = list
-            } catch (e: Exception) {
-                _error.value = "Stores load failed: ${e.message}"
+                _storesThisWeek.value = weekCount
+                buildRecentActivity()
+            } catch (_: Exception) {
             } finally {
                 _isLoadingStores.value = false
             }
@@ -94,40 +119,23 @@ class AdminViewModel : ViewModel() {
     fun toggleStoreBlock(storeId: String, currentlyBlocked: Boolean) {
         viewModelScope.launch {
             try {
-                val newBlockedValue = !currentlyBlocked
-                database.child("Stores").child(storeId)
-                    .child("isBlocked").setValue(newBlockedValue).await()
-                val storeSnapshot = database.child("Stores").child(storeId).get().await()
-                val storeTitle = storeSnapshot.child("Title").value?.toString() ?: ""
-                if (storeTitle.isNotEmpty()) {
-                    val nearestSnapshot = database.child("Nearest").get().await()
-                    nearestSnapshot.children.forEach { child ->
-                        val nearestTitle = child.child("Title").value?.toString() ?: ""
-                        if (nearestTitle == storeTitle) {
-                            child.ref.child("isBlocked").setValue(newBlockedValue).await()
-                        }
-                    }
-                }
+                val newVal = !currentlyBlocked
+                database.child("Stores").child(storeId).child("isBlocked").setValue(newVal).await()
                 _stores.value = _stores.value.map {
-                    if (it.storeId == storeId) it.copy(isBlocked = newBlockedValue) else it
+                    if (it.storeId == storeId) it.copy(isBlocked = newVal) else it
                 }
-            } catch (e: Exception) {
-                _error.value = "Store block toggle failed: ${e.message}"
-            }
+            } catch (_: Exception) {}
         }
     }
 
     fun updateStoreStatus(storeId: String, status: String) {
         viewModelScope.launch {
             try {
-                database.child("Stores").child(storeId)
-                    .child("status").setValue(status).await()
+                database.child("Stores").child(storeId).child("status").setValue(status).await()
                 _stores.value = _stores.value.map {
                     if (it.storeId == storeId) it.copy(status = status) else it
                 }
-            } catch (e: Exception) {
-                _error.value = "Store status update failed: ${e.message}"
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -136,58 +144,88 @@ class AdminViewModel : ViewModel() {
             try {
                 val snapshot = database.child("reports").get().await()
                 val list = mutableListOf<ReportData>()
+                var weekCount = 0
+                val weekStart = weekStart()
                 snapshot.children.forEach { child ->
-                    val report = ReportData(
+                    val createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                    list.add(ReportData(
                         reportId     = child.key ?: "",
                         reason       = child.child("reason").value?.toString() ?: "",
                         reportedBy   = child.child("reportedBy").value?.toString() ?: "",
                         reportedUser = child.child("reportedUser").value?.toString() ?: "",
                         status       = child.child("status").value?.toString() ?: "open",
-                        adminReply   = child.child("adminReply").value?.toString() ?: ""
-                    )
-                    list.add(report)
+                        adminReply   = child.child("adminReply").value?.toString() ?: "",
+                        createdAt    = createdAt
+                    ))
+                    if (createdAt > weekStart) weekCount++
                 }
                 _reports.value = list
-            } catch (e: Exception) {
-                _error.value = "Reports load failed: ${e.message}"
-            }
+                _reportsThisWeek.value = weekCount
+                buildRecentActivity()
+            } catch (_: Exception) {}
         }
     }
 
     fun resolveReport(reportId: String) {
         viewModelScope.launch {
             try {
-                database.child("reports").child(reportId)
-                    .child("status").setValue("resolved").await()
+                database.child("reports").child(reportId).child("status").setValue("resolved").await()
                 _reports.value = _reports.value.map {
                     if (it.reportId == reportId) it.copy(status = "resolved") else it
                 }
-            } catch (e: Exception) {
-                _error.value = "Report resolve failed: ${e.message}"
-            }
+            } catch (_: Exception) {}
         }
     }
 
-    // ✅ Admin reply function
     fun replyToReport(reportId: String, reply: String) {
         viewModelScope.launch {
             try {
-                database.child("reports").child(reportId)
-                    .child("adminReply").setValue(reply).await()
-                database.child("reports").child(reportId)
-                    .child("status").setValue("resolved").await()
+                database.child("reports").child(reportId).child("adminReply").setValue(reply).await()
+                database.child("reports").child(reportId).child("status").setValue("resolved").await()
                 _reports.value = _reports.value.map {
-                    if (it.reportId == reportId)
-                        it.copy(adminReply = reply, status = "resolved")
-                    else it
+                    if (it.reportId == reportId) it.copy(adminReply = reply, status = "resolved") else it
                 }
-            } catch (e: Exception) {
-                _error.value = "Reply failed: ${e.message}"
-            }
+            } catch (_: Exception) {}
         }
     }
 
-    fun clearError() {
-        _error.value = null
+    private fun buildRecentActivity() {
+        val now = System.currentTimeMillis()
+        val activities = mutableListOf<ActivityItem>()
+        _users.value.sortedByDescending { it.createdAt }.take(3).forEach { user ->
+            if (user.createdAt > 0) activities.add(ActivityItem(
+                type = "user", title = "New user registered",
+                subtitle = user.name.ifEmpty { user.email },
+                timestamp = user.createdAt, timeAgo = getTimeAgo(user.createdAt, now)
+            ))
+        }
+        _stores.value.sortedByDescending { it.createdAt }.take(3).forEach { store ->
+            if (store.createdAt > 0) activities.add(ActivityItem(
+                type = "store", title = "New store added",
+                subtitle = store.name, timestamp = store.createdAt,
+                timeAgo = getTimeAgo(store.createdAt, now)
+            ))
+        }
+        _reports.value.sortedByDescending { it.createdAt }.take(3).forEach { report ->
+            if (report.createdAt > 0) activities.add(ActivityItem(
+                type = "report", title = "Report submitted",
+                subtitle = report.reason.take(40), timestamp = report.createdAt,
+                timeAgo = getTimeAgo(report.createdAt, now)
+            ))
+        }
+        _recentActivity.value = activities.sortedByDescending { it.timestamp }.take(10)
+    }
+
+    private fun getTimeAgo(timestamp: Long, now: Long): String {
+        val diff    = now - timestamp
+        val minutes = diff / 60000
+        val hours   = diff / 3600000
+        val days    = diff / 86400000
+        return when {
+            minutes < 1  -> "Just now"
+            minutes < 60 -> "$minutes min ago"
+            hours < 24   -> "$hours hour${if (hours > 1) "s" else ""} ago"
+            else         -> "$days day${if (days > 1) "s" else ""} ago"
+        }
     }
 }

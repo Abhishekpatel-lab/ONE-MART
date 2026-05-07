@@ -1,4 +1,4 @@
-package com.example.nearbystoreapp.screens
+package com.example.nearbystoreapp.viewModel
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -20,11 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.nearbystoreapp.viewModel.ActivityItem
 import com.example.nearbystoreapp.viewModel.AdminViewModel
-import com.example.nearbystoreapp.viewModel.ReportData
-import com.example.nearbystoreapp.viewModel.StoreData
-import com.example.nearbystoreapp.viewModel.UserData
 import java.util.Calendar
 
 val DarkBg       = Color(0xFF0D0D0D)
@@ -35,6 +31,15 @@ val GreenColor   = Color(0xFF43A047)
 val OrangeColor  = Color(0xFFFF6D00)
 val BlueColor    = Color(0xFF1565C0)
 val PurpleColor  = Color(0xFF6A1B9A)
+
+// ✅ Activity data class
+data class ActivityItem(
+    val type      : String = "",
+    val title     : String = "",
+    val subtitle  : String = "",
+    val timestamp : Long   = 0L,
+    val timeAgo   : String = ""
+)
 
 @Composable
 fun AdminDashboardScreen(
@@ -47,7 +52,7 @@ fun AdminDashboardScreen(
 
     Scaffold(
         containerColor = DarkBg,
-        topBar = { AdminTopBar(onLogout = onLogout) },
+        topBar  = { AdminTopBar(onLogout = onLogout) },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF111111), tonalElevation = 0.dp) {
                 tabs.forEachIndexed { index, label ->
@@ -109,16 +114,18 @@ fun AdminTopBar(onLogout: () -> Unit) {
     )
 }
 
+// ── Analytics Tab ─────────────────────────────────────────
 @Composable
 fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
-    val users           by vm.users.collectAsState()
-    val stores          by vm.stores.collectAsState()
-    val reports         by vm.reports.collectAsState()
-    val recentActivity  by vm.recentActivity.collectAsState()
-    val usersThisWeek   by vm.usersThisWeek.collectAsState()
-    val storesThisWeek  by vm.storesThisWeek.collectAsState()
+    val users          by vm.users.collectAsState()
+    val stores         by vm.stores.collectAsState()
+    val reports        by vm.reports.collectAsState()
+    val recentActivity by vm.recentActivity.collectAsState()
+    val usersThisWeek  by vm.usersThisWeek.collectAsState()
+    val storesThisWeek by vm.storesThisWeek.collectAsState()
     val reportsThisWeek by vm.reportsThisWeek.collectAsState()
 
+    // ✅ Sab load karo ek saath
     LaunchedEffect(Unit) {
         vm.loadUsers()
         vm.loadStores()
@@ -136,6 +143,7 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
         modifier            = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // ── Overview Header ──
         item {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -157,21 +165,71 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
             }
         }
 
+        // ── Stats Grid — Real data ──
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NewStatCard("Users",        totalUsers.toString(),       Icons.Default.People,       GreenColor,   BlueColor,          if (usersThisWeek > 0) "+$usersThisWeek this week" else "No change",   Modifier.weight(1f))
-                    NewStatCard("Store Owners", totalStoreOwners.toString(), Icons.Default.Store,        YellowAccent, Color(0xFF1565C0),   if (storesThisWeek > 0) "+$storesThisWeek this week" else "No change", Modifier.weight(1f))
-                    NewStatCard("Banned Users", bannedUsers.toString(),      Icons.Default.Block,        RedColor,     Color(0xFF7B1FA2),   "No change",                                                           Modifier.weight(1f))
+                    NewStatCard(
+                        label    = "Users",
+                        value    = totalUsers.toString(),
+                        icon     = Icons.Default.People,
+                        valueColor = GreenColor,
+                        iconBg   = BlueColor,
+                        subtitle = if (usersThisWeek > 0) "+$usersThisWeek this week" else "No change",
+                        modifier = Modifier.weight(1f)
+                    )
+                    NewStatCard(
+                        label    = "Store Owners",
+                        value    = totalStoreOwners.toString(),
+                        icon     = Icons.Default.Store,
+                        valueColor = YellowAccent,
+                        iconBg   = Color(0xFF1565C0),
+                        subtitle = if (storesThisWeek > 0) "+$storesThisWeek this week" else "No change",
+                        modifier = Modifier.weight(1f)
+                    )
+                    NewStatCard(
+                        label    = "Banned Users",
+                        value    = bannedUsers.toString(),
+                        icon     = Icons.Default.Block,
+                        valueColor = RedColor,
+                        iconBg   = Color(0xFF7B1FA2),
+                        subtitle = "No change",
+                        modifier = Modifier.weight(1f)
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NewStatCard("Blocked Stores", blockedStores.toString(), Icons.Default.Lock,          OrangeColor,  Color(0xFF4E342E),   "No change",                                                              Modifier.weight(1f))
-                    NewStatCard("Total Stores",   totalStores.toString(),   Icons.Default.Store,         PurpleColor,  Color(0xFF4A148C),   if (storesThisWeek > 0) "+$storesThisWeek this week" else "No change",   Modifier.weight(1f))
-                    NewStatCard("Open Reports",   openReports.toString(),   Icons.Default.ErrorOutline,  RedColor,     Color(0xFF7B1FA2),   if (reportsThisWeek > 0) "+$reportsThisWeek this week" else "No change", Modifier.weight(1f))
+                    NewStatCard(
+                        label    = "Blocked Stores",
+                        value    = blockedStores.toString(),
+                        icon     = Icons.Default.Lock,
+                        valueColor = OrangeColor,
+                        iconBg   = Color(0xFF4E342E),
+                        subtitle = "No change",
+                        modifier = Modifier.weight(1f)
+                    )
+                    NewStatCard(
+                        label    = "Total Stores",
+                        value    = totalStores.toString(),
+                        icon     = Icons.Default.Store,
+                        valueColor = PurpleColor,
+                        iconBg   = Color(0xFF4A148C),
+                        subtitle = if (storesThisWeek > 0) "+$storesThisWeek this week" else "No change",
+                        modifier = Modifier.weight(1f)
+                    )
+                    NewStatCard(
+                        label    = "Open Reports",
+                        value    = openReports.toString(),
+                        icon     = Icons.Default.ErrorOutline,
+                        valueColor = RedColor,
+                        iconBg   = Color(0xFF7B1FA2),
+                        subtitle = if (reportsThisWeek > 0) "+$reportsThisWeek this week" else "No change",
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
 
+        // ── Recent Activity — Real ──
         item {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -184,17 +242,23 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
         }
 
         item {
-            Column(
-                modifier            = Modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(14.dp)).padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                if (recentActivity.isEmpty()) {
+            if (recentActivity.isEmpty()) {
+                // ── Fallback ──
+                Column(
+                    modifier            = Modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(14.dp)).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                     ActivityRow(Icons.Default.PersonAdd, GreenColor, "New user registered", "Just now",   "Check Users tab")
                     HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
                     ActivityRow(Icons.Default.Store,     BlueColor,  "New store added",     "25 min ago", "Check Stores tab")
                     HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
                     ActivityRow(Icons.Default.Flag,      RedColor,   "Report submitted",    "1 hour ago", "Check Reports tab")
-                } else {
+                }
+            } else {
+                Column(
+                    modifier            = Modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(14.dp)).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                     recentActivity.forEachIndexed { index, activity ->
                         val (icon, color) = when (activity.type) {
                             "user"   -> Icons.Default.PersonAdd to GreenColor
@@ -203,13 +267,18 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
                             else     -> Icons.Default.Info      to YellowAccent
                         }
                         ActivityRow(icon, color, activity.title, activity.timeAgo, activity.subtitle)
-                        if (index < recentActivity.size - 1) HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
+                        if (index < recentActivity.size - 1) {
+                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
+                        }
                     }
                 }
             }
         }
 
-        item { Text("Quick Actions", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+        // ── Quick Actions — Tab switch karte hain ──
+        item {
+            Text("Quick Actions", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 QuickActionCard("Add Store",  Icons.Default.AddBusiness, Modifier.weight(1f)) { onTabSwitch(2) }
@@ -222,6 +291,7 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
                 QuickActionCard("View Reports", Icons.Default.Flag,  Modifier.weight(1f)) { onTabSwitch(3) }
             }
         }
+
         item { Spacer(modifier = Modifier.height(8.dp)) }
     }
 }
@@ -239,7 +309,7 @@ fun NewStatCard(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(value, color = valueColor, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp)
-            Text(label, color = Color.White, fontWeight = FontWeight.Medium,   fontSize = 11.sp)
+            Text(label, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 11.sp)
             Spacer(modifier = Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (subtitle == "No change") {
@@ -269,6 +339,7 @@ fun ActivityRow(icon: ImageVector, iconColor: Color, title: String, time: String
     }
 }
 
+// ✅ Quick Action — onClick parameter added
 @Composable
 fun QuickActionCard(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
@@ -289,6 +360,7 @@ fun QuickActionCard(label: String, icon: ImageVector, modifier: Modifier = Modif
     }
 }
 
+// ── Users Tab ─────────────────────────────────────────────
 @Composable
 fun UsersTab(vm: AdminViewModel) {
     val users by vm.users.collectAsState()
@@ -355,6 +427,7 @@ fun UserCard(user: UserData, onBanToggle: () -> Unit) {
     }
 }
 
+// ── Stores Tab ────────────────────────────────────────────
 @Composable
 fun StoresTab(vm: AdminViewModel) {
     val stores    by vm.stores.collectAsState()
@@ -418,8 +491,8 @@ fun StoreAdminCard(store: StoreData, onApprove: () -> Unit, onReject: () -> Unit
             if (store.status == "pending") {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onApprove, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = GreenColor),  shape = RoundedCornerShape(10.dp)) { Text("Approve", color = Color.White) }
-                    Button(onClick = onReject,  modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = RedColor),    shape = RoundedCornerShape(10.dp)) { Text("Reject",  color = Color.White) }
+                    Button(onClick = onApprove, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = GreenColor), shape = RoundedCornerShape(10.dp)) { Text("Approve", color = Color.White) }
+                    Button(onClick = onReject,  modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = RedColor),   shape = RoundedCornerShape(10.dp)) { Text("Reject",  color = Color.White) }
                 }
             }
         }
@@ -438,6 +511,7 @@ fun StatusChip(status: String) {
     }
 }
 
+// ── Reports Tab ───────────────────────────────────────────
 @Composable
 fun ReportsTab(vm: AdminViewModel) {
     val reports by vm.reports.collectAsState()
@@ -521,18 +595,15 @@ fun ReportCard(report: ReportData, onResolve: () -> Unit, onReply: (String) -> U
                     OutlinedTextField(
                         value = replyText, onValueChange = { replyText = it },
                         placeholder = { Text("User ko reply likho...", color = Color.Gray) },
-                        modifier    = Modifier.fillMaxWidth().height(100.dp),
-                        colors      = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor   = YellowAccent,
-                            unfocusedBorderColor = Color.Gray,
-                            focusedTextColor     = Color.White,
-                            unfocusedTextColor   = Color.White,
-                            cursorColor          = YellowAccent
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = YellowAccent, unfocusedBorderColor = Color.Gray,
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = YellowAccent
                         ),
                         maxLines = 4
                     )
                     Button(
-                        onClick  = { if (replyText.isNotEmpty()) { onReply(replyText); showReplyBox = false; replyText = "" } },
+                        onClick = { if (replyText.isNotEmpty()) { onReply(replyText); showReplyBox = false; replyText = "" } },
                         modifier = Modifier.fillMaxWidth(),
                         enabled  = replyText.isNotEmpty(),
                         colors   = ButtonDefaults.buttonColors(containerColor = YellowAccent, disabledContainerColor = Color.Gray),
@@ -545,3 +616,32 @@ fun ReportCard(report: ReportData, onResolve: () -> Unit, onReply: (String) -> U
         }
     }
 }
+
+// ── Data Classes ──────────────────────────────────────────
+data class UserData(
+    val uid       : String  = "",
+    val name      : String  = "",
+    val email     : String  = "",
+    val userType  : String  = "user",
+    val isBanned  : Boolean = false,
+    val createdAt : Long    = 0L   // ✅ Week tracking ke liye
+)
+
+data class StoreData(
+    val storeId    : String  = "",
+    val name       : String  = "",
+    val ownerEmail : String  = "",
+    val status     : String  = "pending",
+    val isBlocked  : Boolean = false,
+    val createdAt  : Long    = 0L   // ✅ Week tracking ke liye
+)
+
+data class ReportData(
+    val reportId     : String = "",
+    val reason       : String = "",
+    val reportedBy   : String = "",
+    val reportedUser : String = "",
+    val status       : String = "open",
+    val adminReply   : String = "",
+    val createdAt    : Long   = 0L   // ✅ Week tracking ke liye
+)
