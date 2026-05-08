@@ -28,6 +28,7 @@ import com.example.nearbystoreapp.screen.dashboard.SupportScreen
 import com.example.nearbystoreapp.screen.dashboard.map.MapScreen
 import com.example.nearbystoreapp.screen.dashboard.results.ResultList
 import com.example.nearbystoreapp.screen.profile.ProfileScreen
+import com.example.nearbystoreapp.screen.store.AddEditStoreScreen
 import com.example.nearbystoreapp.screen.store.StoreDashboardPlaceholder
 import com.example.nearbystoreapp.screen.wishlist.WishlistScreen
 import com.example.nearbystoreapp.viewModel.AuthState
@@ -58,11 +59,11 @@ class MainActivity : ComponentActivity() {
         FirebaseMigrationUtil.addMissingStoreFields()
 
         setContent {
-            val navController    = rememberNavController()
-            val authViewModel: AuthViewModel       = viewModel()
+            val navController        = rememberNavController()
+            val authViewModel: AuthViewModel         = viewModel()
             val wishlistViewModel: WishlistViewModel = viewModel()
             val authState by authViewModel.authState.collectAsState()
-            var navReady by remember { mutableStateOf(false) }
+            var navReady  by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) { authViewModel.checkCurrentUser() }
 
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
                 composable("splash") {
                     LaunchedEffect(Unit) { navReady = true }
                     Box(
-                        modifier = Modifier.fillMaxSize().background(colorResource(R.color.black3)),
+                        modifier         = Modifier.fillMaxSize().background(colorResource(R.color.black3)),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = colorResource(R.color.gold))
@@ -80,8 +81,8 @@ class MainActivity : ComponentActivity() {
 
                 composable("login") {
                     LoginScreen(
-                        authViewModel       = authViewModel,
-                        onLoginSuccess      = { userType ->
+                        authViewModel        = authViewModel,
+                        onLoginSuccess       = { userType ->
                             when (userType) {
                                 "store_owner" -> navController.navigate("store_dashboard") { popUpTo(0) { inclusive = true } }
                                 "admin"       -> navController.navigate("admin_dashboard")  { popUpTo(0) { inclusive = true } }
@@ -94,8 +95,8 @@ class MainActivity : ComponentActivity() {
 
                 composable("register") {
                     RegisterScreen(
-                        authViewModel      = authViewModel,
-                        onRegisterSuccess  = { userType ->
+                        authViewModel     = authViewModel,
+                        onRegisterSuccess = { userType ->
                             when (userType) {
                                 "store_owner" -> navController.navigate("store_dashboard") { popUpTo(0) { inclusive = true } }
                                 "admin"       -> navController.navigate("admin_dashboard")  { popUpTo(0) { inclusive = true } }
@@ -108,18 +109,18 @@ class MainActivity : ComponentActivity() {
 
                 composable("user_dashboard") {
                     com.example.nearbystoreapp.screen.dashboard.DashboardScreen(
-                        authViewModel      = authViewModel,
-                        wishlistViewModel  = wishlistViewModel,
-                        onCategoryClick    = { id, title -> navController.navigate("results/$id/$title") },
-                        onProfileClick     = { navController.navigate("profile") },
-                        onStoreClick       = { store ->
+                        authViewModel        = authViewModel,
+                        wishlistViewModel    = wishlistViewModel,
+                        onCategoryClick      = { id, title -> navController.navigate("results/$id/$title") },
+                        onProfileClick       = { navController.navigate("profile") },
+                        onStoreClick         = { store ->
                             val storeJson = URLEncoder.encode(Gson().toJson(store), StandardCharsets.UTF_8.toString())
                             navController.navigate("store_detail/$storeJson")
                         },
-                        onWishlistClick    = { navController.navigate("wishlist") },
-                        onSupportClick     = { navController.navigate("support") },
+                        onWishlistClick      = { navController.navigate("wishlist") },
+                        onSupportClick       = { navController.navigate("support") },
                         onCategoriesTabClick = { navController.navigate("all_categories") },
-                        onSearchClick      = { navController.navigate("search") }  // ✅ Add kiya
+                        onSearchClick        = { navController.navigate("search") }
                     )
                 }
 
@@ -132,10 +133,20 @@ class MainActivity : ComponentActivity() {
 
                 composable("admin_dashboard") {
                     AdminDashboardScreen(
-                        onLogout = {
+                        onLogout   = {
                             authViewModel.logout()
                             navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                        }
+                        },
+                        onAddStore = { navController.navigate("admin_add_store") }
+                    )
+                }
+
+
+                composable("admin_add_store") {
+                    AddEditStoreScreen(
+                        existingStore = null,
+                        onBack        = { navController.popBackStack() },
+                        onSaved       = { navController.popBackStack() }
                     )
                 }
 
@@ -162,7 +173,6 @@ class MainActivity : ComponentActivity() {
                     SupportScreen(onBack = { navController.popBackStack() })
                 }
 
-                // ✅ Search route add kiya
                 composable("search") {
                     SearchScreen(onBack = { navController.popBackStack() })
                 }
@@ -171,9 +181,9 @@ class MainActivity : ComponentActivity() {
                     val id    = backStackEntry.arguments?.getString("id")    ?: ""
                     val title = backStackEntry.arguments?.getString("title") ?: ""
                     ResultList(
-                        id          = id,
-                        title       = title,
-                        onBackClick = { navController.popBackStack() },
+                        id           = id,
+                        title        = title,
+                        onBackClick  = { navController.popBackStack() },
                         onStoreClick = { store ->
                             val storeJson = URLEncoder.encode(Gson().toJson(store), StandardCharsets.UTF_8.toString())
                             navController.navigate("store_detail/$storeJson")

@@ -46,7 +46,8 @@ data class DealItem(
     val storeName: String = "",
     val badge: String = "",
     val rating: Float = 0f,
-    val ratingCount: Int = 0
+    val ratingCount: Int = 0,
+    val storeFirebaseKey: String = ""  // ✅ Added
 )
 
 @Composable
@@ -59,7 +60,7 @@ fun DashboardScreen(
     onWishlistClick: () -> Unit,
     onSupportClick: () -> Unit,
     onCategoriesTabClick: () -> Unit,
-    onSearchClick: () -> Unit = {}  // ✅ Add kiya
+    onSearchClick: () -> Unit = {}
 ) {
     val dashboardRepository = remember { DashboardRepository() }
 
@@ -136,14 +137,15 @@ fun DashboardScreen(
                                 else -> 56
                             }
                             val dealItem = DealItem(
-                                name        = name,
-                                price       = price,
-                                unit        = item.child("unit").value?.toString()      ?: "",
-                                imagePath   = item.child("imagePath").value?.toString() ?: "",
-                                storeName   = storeName,
-                                badge       = badge,
-                                rating      = rating,
-                                ratingCount = ratingCount
+                                name             = name,
+                                price            = price,
+                                unit             = item.child("unit").value?.toString()      ?: "",
+                                imagePath        = item.child("imagePath").value?.toString() ?: "",
+                                storeName        = storeName,
+                                badge            = badge,
+                                rating           = rating,
+                                ratingCount      = ratingCount,
+                                storeFirebaseKey = store.key ?: ""  // ✅ Added
                             )
                             val list = categoryItemsMap.getOrPut(storeCategory) { mutableListOf() }
                             if (list.size < 2) list.add(dealItem)
@@ -181,7 +183,7 @@ fun DashboardScreen(
             item {
                 NewTopBar(
                     userName       = userName,
-                    onSearchClick  = onSearchClick,  // ✅ Fix
+                    onSearchClick  = onSearchClick,
                     onProfileClick = onProfileClick
                 )
             }
@@ -215,7 +217,34 @@ fun DashboardScreen(
             }
 
             item {
-                BestDealsSection(items = dealItems, showLoading = showDealsLoading)
+                // ✅ onDealClick added — deal card click par store open hoga
+                BestDealsSection(
+                    items       = dealItems,
+                    showLoading = showDealsLoading,
+                    onDealClick = { deal ->
+                        FirebaseDatabase.getInstance().reference
+                            .child("Stores")
+                            .child(deal.storeFirebaseKey)
+                            .get()
+                            .addOnSuccessListener { snapshot ->
+                                val store = StoreModel(
+                                    firebaseKey  = deal.storeFirebaseKey,
+                                    title        = snapshot.child("Title").value?.toString()                       ?: "",
+                                    category     = snapshot.child("Category").value?.toString()                    ?: "",
+                                    address      = snapshot.child("Address").value?.toString()                     ?: "",
+                                    shortAddress = snapshot.child("ShortAddress").value?.toString()                ?: "",
+                                    imagePath    = snapshot.child("ImagePath").value?.toString()                   ?: "",
+                                    latitude     = snapshot.child("Latitude").value?.toString()?.toDoubleOrNull()  ?: 0.0,
+                                    longitude    = snapshot.child("Longitude").value?.toString()?.toDoubleOrNull() ?: 0.0,
+                                    hours        = snapshot.child("Hours").value?.toString()                       ?: "",
+                                    call         = snapshot.child("Call").value?.toString()                        ?: "",
+                                    activity     = snapshot.child("Activity").value?.toString()                    ?: "",
+                                    categoryId   = snapshot.child("CategoryId").value?.toString()                  ?: ""
+                                )
+                                onStoreClick(store)
+                            }
+                    }
+                )
             }
 
             item { WhyChooseSection() }
@@ -270,7 +299,6 @@ fun NewTopBar(
                 Text("MART", color = colorResource(R.color.gold), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 11.sp)
             }
 
-            // ✅ Search button — onSearchClick call hoga
             Box(
                 modifier = Modifier
                     .size(38.dp)
@@ -371,8 +399,13 @@ fun NewCategoryItem(category: CategoryModel, onClick: () -> Unit) {
     }
 }
 
+// ✅ onDealClick parameter added
 @Composable
-fun BestDealsSection(items: List<DealItem>, showLoading: Boolean) {
+fun BestDealsSection(
+    items: List<DealItem>,
+    showLoading: Boolean,
+    onDealClick: (DealItem) -> Unit = {}
+) {
     Column(modifier = Modifier.padding(top = 24.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Best Deals for You", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -386,34 +419,60 @@ fun BestDealsSection(items: List<DealItem>, showLoading: Boolean) {
                 }
             }
             items.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(12.dp)).padding(24.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(12.dp)).padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text("Koi deals available nahi hain", color = Color.Gray, fontSize = 13.sp)
                 }
             }
             else -> {
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    itemsIndexed(items) { _, deal -> DealItemCard(deal = deal) }
+                    itemsIndexed(items) { _, deal ->
+                        DealItemCard(
+                            deal    = deal,
+                            onClick = { onDealClick(deal) }  // ✅ click pass ho raha hai
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+// ✅ onClick parameter added + clickable modifier added
 @Composable
-fun DealItemCard(deal: DealItem) {
-    Box(modifier = Modifier.width(160.dp).background(Color(0xFF1A1A1A), RoundedCornerShape(14.dp))) {
+fun DealItemCard(deal: DealItem, onClick: () -> Unit = {}) {
+    Box(
+        modifier = Modifier
+            .width(160.dp)
+            .background(Color(0xFF1A1A1A), RoundedCornerShape(14.dp))
+            .clickable { onClick() }  // ✅ Click handle
+    ) {
         Column {
             Box(modifier = Modifier.fillMaxWidth().height(120.dp)) {
                 if (deal.imagePath.isNotEmpty()) {
-                    AsyncImage(model = deal.imagePath, contentDescription = null, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)), contentScale = ContentScale.Crop)
+                    AsyncImage(
+                        model              = deal.imagePath,
+                        contentDescription = null,
+                        modifier           = Modifier.fillMaxSize().clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
+                        contentScale       = ContentScale.Crop
+                    )
                 } else {
-                    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF2A2A2A), RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier         = Modifier.fillMaxSize().background(Color(0xFF2A2A2A), RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text("🛍️", fontSize = 36.sp)
                     }
                 }
                 if (deal.badge.isNotEmpty()) {
                     val badgeColor = if (deal.badge == "Best Seller") Color(0xFF4CAF50) else Color(0xFFFFA000)
-                    Surface(shape = RoundedCornerShape(bottomEnd = 8.dp), color = badgeColor, modifier = Modifier.align(Alignment.TopStart)) {
+                    Surface(
+                        shape    = RoundedCornerShape(bottomEnd = 8.dp),
+                        color    = badgeColor,
+                        modifier = Modifier.align(Alignment.TopStart)
+                    ) {
                         Text(deal.badge, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                     }
                 }
@@ -442,10 +501,10 @@ fun WhyChooseSection() {
         Text("Why Choose One Mart?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            WhyChooseItem("💰", "Best Prices",       "Lowest prices always",          Modifier.weight(1f))
-            WhyChooseItem("🔄", "Easy Returns",      "Hassle free returns",            Modifier.weight(1f))
-            WhyChooseItem("🔒", "100% Secure",       "Secure payments guaranteed",     Modifier.weight(1f))
-            WhyChooseItem("⭐", "Quality Products",  "Top quality products",           Modifier.weight(1f))
+            WhyChooseItem("💰", "Best Prices",      "Lowest prices always",       Modifier.weight(1f))
+            WhyChooseItem("🔄", "Easy Returns",     "Hassle free returns",         Modifier.weight(1f))
+            WhyChooseItem("🔒", "100% Secure",      "Secure payments guaranteed",  Modifier.weight(1f))
+            WhyChooseItem("⭐", "Quality Products", "Top quality products",        Modifier.weight(1f))
         }
     }
 }

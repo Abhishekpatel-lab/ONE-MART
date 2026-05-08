@@ -17,14 +17,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.nearbystoreapp.viewModel.ActivityItem
 import com.example.nearbystoreapp.viewModel.AdminViewModel
 import com.example.nearbystoreapp.viewModel.ReportData
 import com.example.nearbystoreapp.viewModel.StoreData
 import com.example.nearbystoreapp.viewModel.UserData
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import java.util.Calendar
 
 val DarkBg       = Color(0xFF0D0D0D)
@@ -39,6 +43,7 @@ val PurpleColor  = Color(0xFF6A1B9A)
 @Composable
 fun AdminDashboardScreen(
     onLogout: () -> Unit,
+    onAddStore: () -> Unit = {},
     adminViewModel: AdminViewModel = viewModel()
 ) {
     val selectedTab = remember { mutableStateOf(0) }
@@ -70,7 +75,11 @@ fun AdminDashboardScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding).background(DarkBg)) {
             when (selectedTab.value) {
-                0 -> AnalyticsTab(adminViewModel, onTabSwitch = { selectedTab.value = it })
+                0 -> AnalyticsTab(
+                    vm          = adminViewModel,
+                    onTabSwitch = { selectedTab.value = it },
+                    onAddStore  = onAddStore
+                )
                 1 -> UsersTab(adminViewModel)
                 2 -> StoresTab(adminViewModel)
                 3 -> ReportsTab(adminViewModel)
@@ -109,8 +118,188 @@ fun AdminTopBar(onLogout: () -> Unit) {
     )
 }
 
+// ✅ Add User Dialog
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
+fun AddUserDialog(onDismiss: () -> Unit, onSuccess: () -> Unit) {
+    var name         by remember { mutableStateOf("") }
+    var email        by remember { mutableStateOf("") }
+    var password     by remember { mutableStateOf("") }
+    var userType     by remember { mutableStateOf("user") }
+    var isLoading    by remember { mutableStateOf(false) }
+    var errorMsg     by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+    var showDropdown by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape  = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+            modifier = Modifier.fillMaxWidth().padding(8.dp)
+        ) {
+            Column(
+                modifier            = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("👤 Add New User", color = YellowAccent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+
+                // Name
+                OutlinedTextField(
+                    value            = name,
+                    onValueChange    = { name = it },
+                    label            = { Text("Full Name", color = Color.Gray) },
+                    modifier         = Modifier.fillMaxWidth(),
+                    singleLine       = true,
+                    colors           = adminTextFieldColors()
+                )
+
+                // Email
+                OutlinedTextField(
+                    value         = email,
+                    onValueChange = { email = it },
+                    label         = { Text("Email", color = Color.Gray) },
+                    modifier      = Modifier.fillMaxWidth(),
+                    singleLine    = true,
+                    colors        = adminTextFieldColors()
+                )
+
+                // Password
+                OutlinedTextField(
+                    value               = password,
+                    onValueChange       = { password = it },
+                    label               = { Text("Password", color = Color.Gray) },
+                    modifier            = Modifier.fillMaxWidth(),
+                    singleLine          = true,
+                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon        = {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(
+                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = null,
+                                tint = Color.Gray
+                            )
+                        }
+                    },
+                    colors = adminTextFieldColors()
+                )
+
+                // User Type Dropdown
+                ExposedDropdownMenuBox(
+                    expanded        = showDropdown,
+                    onExpandedChange = { showDropdown = it }
+                ) {
+                    OutlinedTextField(
+                        value         = if (userType == "user") "Regular User" else "Store Owner",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text("User Type", color = Color.Gray) },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showDropdown) },
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(),
+                        colors        = adminTextFieldColors()
+                    )
+                    ExposedDropdownMenu(
+                        expanded        = showDropdown,
+                        onDismissRequest = { showDropdown = false },
+                        modifier        = Modifier.background(Color(0xFF2A2A2A))
+                    ) {
+                        DropdownMenuItem(
+                            text    = { Text("👤 Regular User", color = Color.White) },
+                            onClick = { userType = "user"; showDropdown = false }
+                        )
+                        DropdownMenuItem(
+                            text    = { Text("🏪 Store Owner", color = Color.White) },
+                            onClick = { userType = "store_owner"; showDropdown = false }
+                        )
+                    }
+                }
+
+                // Error message
+                if (errorMsg.isNotEmpty()) {
+                    Text(errorMsg, color = RedColor, fontSize = 12.sp)
+                }
+
+                // Buttons
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick  = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape    = RoundedCornerShape(10.dp),
+                        colors   = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
+                    ) {
+                        Text("Cancel", color = Color.Gray)
+                    }
+                    Button(
+                        onClick = {
+                            if (name.isEmpty() || email.isEmpty() || password.isEmpty()) {
+                                errorMsg = "Saare fields fill karo!"
+                                return@Button
+                            }
+                            if (password.length < 6) {
+                                errorMsg = "Password kam se kam 6 characters ka hona chahiye!"
+                                return@Button
+                            }
+                            isLoading = true
+                            errorMsg  = ""
+
+                            // Firebase Auth mein user create karo
+                            FirebaseAuth.getInstance()
+                                .createUserWithEmailAndPassword(email.trim(), password)
+                                .addOnSuccessListener { result ->
+                                    val uid = result.user?.uid ?: return@addOnSuccessListener
+                                    // Realtime DB mein save karo
+                                    val userData = mapOf(
+                                        "name"     to name,
+                                        "email"    to email.trim(),
+                                        "userType" to userType,
+                                        "isBanned" to false
+                                    )
+                                    FirebaseDatabase.getInstance().reference
+                                        .child("users").child(uid)
+                                        .setValue(userData)
+                                        .addOnSuccessListener {
+                                            isLoading = false
+                                            onSuccess()
+                                        }
+                                        .addOnFailureListener {
+                                            isLoading = false
+                                            errorMsg = "DB error: ${it.message}"
+                                        }
+                                }
+                                .addOnFailureListener {
+                                    isLoading = false
+                                    errorMsg  = it.message ?: "User create karne mein error"
+                                }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled  = !isLoading,
+                        colors   = ButtonDefaults.buttonColors(containerColor = YellowAccent, disabledContainerColor = Color.Gray),
+                        shape    = RoundedCornerShape(10.dp)
+                    ) {
+                        if (isLoading) CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(18.dp))
+                        else Text("Add User", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun adminTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor   = YellowAccent,
+    unfocusedBorderColor = Color.Gray,
+    focusedTextColor     = Color.White,
+    unfocusedTextColor   = Color.White,
+    cursorColor          = YellowAccent
+)
+
+@Composable
+fun AnalyticsTab(
+    vm: AdminViewModel,
+    onTabSwitch: (Int) -> Unit,
+    onAddStore: () -> Unit = {}
+) {
     val users           by vm.users.collectAsState()
     val stores          by vm.stores.collectAsState()
     val reports         by vm.reports.collectAsState()
@@ -118,6 +307,9 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
     val usersThisWeek   by vm.usersThisWeek.collectAsState()
     val storesThisWeek  by vm.storesThisWeek.collectAsState()
     val reportsThisWeek by vm.reportsThisWeek.collectAsState()
+
+
+    var showAddUserDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.loadUsers()
@@ -131,6 +323,17 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
     val totalStores      = stores.size
     val blockedStores    = stores.count { it.isBlocked }
     val openReports      = reports.count { it.status == "open" }
+
+
+    if (showAddUserDialog) {
+        AddUserDialog(
+            onDismiss = { showAddUserDialog = false },
+            onSuccess = {
+                showAddUserDialog = false
+                vm.loadUsers()  // Refresh users list
+            }
+        )
+    }
 
     LazyColumn(
         modifier            = Modifier.fillMaxSize().padding(16.dp),
@@ -210,16 +413,19 @@ fun AnalyticsTab(vm: AdminViewModel, onTabSwitch: (Int) -> Unit) {
         }
 
         item { Text("Quick Actions", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("Add Store",  Icons.Default.AddBusiness, Modifier.weight(1f)) { onTabSwitch(2) }
-                QuickActionCard("View Users", Icons.Default.People,      Modifier.weight(1f)) { onTabSwitch(1) }
+
+                QuickActionCard("Add Store",  Icons.Default.AddBusiness, Modifier.weight(1f)) { onAddStore() }
+
+                QuickActionCard("Add User",   Icons.Default.PersonAdd,   Modifier.weight(1f)) { showAddUserDialog = true }
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("View Stores",  Icons.Default.Store, Modifier.weight(1f)) { onTabSwitch(2) }
-                QuickActionCard("View Reports", Icons.Default.Flag,  Modifier.weight(1f)) { onTabSwitch(3) }
+                QuickActionCard("View Stores",  Icons.Default.Store,   Modifier.weight(1f)) { onTabSwitch(2) }
+                QuickActionCard("View Reports", Icons.Default.Flag,    Modifier.weight(1f)) { onTabSwitch(3) }
             }
         }
         item { Spacer(modifier = Modifier.height(8.dp)) }
